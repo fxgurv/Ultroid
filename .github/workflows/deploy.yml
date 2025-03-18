@@ -1,0 +1,68 @@
+name: Deploy to Hugging Face Space
+
+on:
+  push:
+    branches: [ UltroidX ]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Login to Hugging Face
+        run: |
+          pip install huggingface_hub
+          huggingface-cli login --token ${{ secrets.HF_TOKEN }}
+
+      - name: Create Space secrets from GitHub secrets
+        run: |
+          pip install -U huggingface_hub
+          python -c "
+          from huggingface_hub import HfApi
+          
+          api = HfApi(token='${{ secrets.HF_TOKEN }}')
+          space_id = '${{ secrets.HF_SPACE_NAME }}'
+          
+          # Transfer all GitHub secrets to Hugging Face Space
+          secrets_to_transfer = {
+              'API_ID': '${{ secrets.API_ID }}',
+              'API_HASH': '${{ secrets.API_HASH }}',
+              'SESSION': '${{ secrets.SESSION }}',
+              'BOT_TOKEN': '${{ secrets.BOT_TOKEN }}',
+              'LOG_CHANNEL': '${{ secrets.LOG_CHANNEL }}',
+              'REDIS_URI': '${{ secrets.REDIS_URI }}',
+              'REDIS_PASSWORD': '${{ secrets.REDIS_PASSWORD }}'
+          }
+          
+          for secret_name, secret_value in secrets_to_transfer.items():
+              if secret_value:  # Only set non-empty secrets
+                  print(f'Setting secret: {secret_name}')
+                  api.add_space_secret(
+                      repo_id=space_id,
+                      key=secret_name,
+                      value=secret_value
+                  )
+                  
+          print('All secrets transferred successfully!')
+          "
+
+      - name: Upload Space files
+        run: |
+          python -c "
+          from huggingface_hub import HfApi
+          
+          api = HfApi(token='${{ secrets.HF_TOKEN }}')
+          
+          # Upload Dockerfile
+          api.upload_file(
+              path_or_fileobj='Dockerfile',
+              path_in_repo='Dockerfile',
+              repo_id='${{ secrets.HF_SPACE_NAME }}',
+              repo_type='space'
+          )
+          
+          print('Files uploaded successfully')
+          "
